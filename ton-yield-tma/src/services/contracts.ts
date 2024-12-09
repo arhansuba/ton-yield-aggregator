@@ -6,5 +6,7 @@ const client = new TonClient({
 });
 
 export function getVaultContract() {
-  return client.open(Address.parse(VAULT_ADDRESS));
+  const vaultAddress = Address.parse(VAULT_ADDRESS);
+  const vaultContract: Contract = { address: vaultAddress };
+  return client.open(vaultContract);
 }

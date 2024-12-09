@@ -1,23 +1,53 @@
-import React from 'react';
-import WebApp from '@twa-dev/sdk';
+import { useEffect } from 'react';
+import  WebApp  from '@twa-dev/sdk';
 
 interface MainButtonProps {
   text: string;
   onClick: () => void;
-  loading?: boolean;
+  show?: boolean;
+  disabled?: boolean;
+  progress?: boolean;
+  color?: string;
 }
 
-export const MainButton: React.FC<MainButtonProps> = ({ text, onClick, loading }) => {
-  React.useEffect(() => {
-    WebApp.MainButton.setParams({
-      text: loading ? 'Loading...' : text,
-      is_active: !loading,
-    }).onClick(onClick);
-    
+export default function MainButton({
+  text,
+  onClick,
+  show = true,
+  disabled = false,
+  progress = false,
+  color
+}: MainButtonProps) {
+  useEffect(() => {
+    WebApp.MainButton.setText(text);
+    WebApp.MainButton.onClick(onClick);
+
+    if (color) {
+      WebApp.MainButton.setParams({ color });
+    }
+
+    if (show) {
+      WebApp.MainButton.show();
+    } else {
+      WebApp.MainButton.hide();
+    }
+
+    if (disabled) {
+      WebApp.MainButton.disable();
+    } else {
+      WebApp.MainButton.enable();
+    }
+
+    if (progress) {
+      WebApp.MainButton.showProgress();
+    } else {
+      WebApp.MainButton.hideProgress();
+    }
+
     return () => {
       WebApp.MainButton.offClick(onClick);
     };
-  }, [text, onClick, loading]);
+  }, [text, onClick, show, disabled, progress, color]);
 
   return null;
-};
+}

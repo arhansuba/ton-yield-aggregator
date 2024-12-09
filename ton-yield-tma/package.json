@@ -8,23 +8,26 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@twa-dev/sdk": "^6.9.1",
-    "@ton/ton": "^13.9.0",
+    "@ton/core": "^0.59.0",
+    "@ton/crypto": "^3.3.0",
+    "@ton/ton": "^13.11.2",
     "@tonconnect/sdk": "^3.0.0",
-    "@tonconnect/ui-react": "^2.0.0",
+    "@tonconnect/ui-react": "^2.0.9",
+    "@twa-dev/sdk": "^6.9.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "shadcn-ui": "^0.9.3",
     "vite-plugin-node-polyfills": "^0.17.0"
   },
   "devDependencies": {
-    "@types/react": "^18.2.37",
-    "@types/react-dom": "^18.2.15",
+    "@types/react": "^18.3.14",
+    "@types/react-dom": "^18.3.2",
     "@typescript-eslint/eslint-plugin": "^6.11.0",
     "@typescript-eslint/parser": "^6.11.0",
     "@vitejs/plugin-react": "^4.2.0",
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.31",
-    "tailwindcss": "^3.3.5",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
     "typescript": "^5.2.2",
     "vite": "^5.0.0"
   }

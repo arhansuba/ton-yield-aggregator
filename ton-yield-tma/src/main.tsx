@@ -1,17 +1,43 @@
+import { useState } from 'react';
+import { TonConnectButton } from '@tonconnect/ui-react'; 
+import { WebApp } from '@twa-dev/sdk';
+import { VaultDashboard } from './components/features/VaultDashboard';
+import { MainButton } from './components/common/MainButton';
 import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { TonConnectUIProvider } from '@tonconnect/ui-react';
-import WebApp from '@twa-dev/sdk';
-import App from './App';
-import './index.css';
 
-// Initialize Telegram WebApp
-WebApp.ready();
+export default function App() {
+  const [isConnected, setIsConnected] = useState(false);
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <TonConnectUIProvider manifestUrl="https://ton-yield.com/tonconnect-manifest.json">
-      <App />
-    </TonConnectUIProvider>
-  </React.StrictMode>
-);
+  WebApp.ready();
+
+  const handleConnect = () => {
+    setIsConnected(true);
+    WebApp.MainButton.hide();
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="border-b bg-white p-4 flex justify-between items-center">
+        <h1 className="text-xl font-bold">TON Yield</h1>
+        <TonConnectButton />
+      </header>
+
+      <main className="container mx-auto px-4 py-6">
+        {isConnected ? (
+          <VaultDashboard />
+        ) : (
+          <div className="text-center py-12">
+            <h2 className="text-xl mb-4">Connect Wallet to Continue</h2>
+            <p className="text-gray-600">Manage your TON yield strategies</p>
+          </div>
+        )}
+      </main>
+
+      <MainButton
+        text="Connect Wallet"
+        onClick={() => WebApp.HapticFeedback.impactOccurred('medium')}
+        show={!isConnected}
+      />
+    </div>
+  );
+}
