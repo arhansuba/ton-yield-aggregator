@@ -1,0 +1,23 @@
+{
+  "name": "ton-yield-aggregator",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "tma-frontend",
+    "telegram-bot"
+  ],
+  "scripts": {
+    "build": "blueprint build",
+    "test": "blueprint test",
+    "deploy": "blueprint run"
+  },
+  "dependencies": {
+    "@ton-community/blueprint": "^0.12.0",
+    "@ton-community/sandbox": "^0.11.0",
+    "@ton-community/test-utils": "^0.3.0",
+    "@ton/core": "^0.53.0",
+    "@ton/crypto": "^3.2.0",
+    "@ton/ton": "^13.9.0",
+    "typescript": "^5.0.4"
+  }
+}

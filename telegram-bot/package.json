@@ -1,0 +1,23 @@
+{
+  "name": "ton-yield-aggregator-bot",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "telegraf": "^4.15.0",
+    "@ton/core": "latest",
+    "@ton/crypto": "latest",
+    "dotenv": "^16.0.3",
+    "winston": "^3.8.2"
+  },
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "dev": "nodemon src/index.ts",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.4",
+    "ts-node": "^10.9.1",
+    "nodemon": "^2.0.22"
+  }
+}
