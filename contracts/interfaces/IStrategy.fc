@@ -1,0 +1,32 @@
+#pragma version >=0.4.0;
+
+{- Strategy Interface -} 
+
+() invest(int amount) method_id {
+    ;; Implementation required
+}
+
+(int) withdraw(int amount) method_id {
+    ;; Implementation required
+    return 0; 
+}
+
+(int) claim_yield() method_id {
+    ;; Implementation required
+    return 0;
+}
+
+(int) get_total_assets() method_id {
+    ;; Implementation required 
+    return 0;
+}
+
+(int) get_performance() method_id {  
+    ;; Implementation required
+    return 0;
+}
+
+(int) get_tvl() method_id {
+    ;; Implementation required
+    return 0;
+}

@@ -1,12 +1,25 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
 
-export type VaultConfig = {
-    id: number;
-    counter: number;
-};
+
+export interface VaultConfig {
+    id(id: any, arg1: number): unknown;
+    counter(counter: any, arg1: number): unknown;
+
+    owner: Address;
+
+    totalAssets: bigint;
+
+    totalShares: bigint;
+
+    strategies: any;
+
+    paused: boolean;
+
+}
+
 
 export function vaultConfigToCell(config: VaultConfig): Cell {
-    return beginCell().storeUint(config.id, 32).storeUint(config.counter, 32).endCell();
+    return beginCell().storeUint(config.id(0, 0) as number, 32).storeUint(config.counter(0, 0) as number, 32).endCell();
 }
 
 export const Opcodes = {
@@ -19,6 +32,16 @@ export class Vault implements Contract {
     static createFromAddress(address: Address) {
         return new Vault(address);
     }
+    async getVaultData(provider: ContractProvider) {
+        const { stack } = await provider.get('get_vault_data', []);
+        return {
+            totalAssets: stack.readBigNumber(),
+            totalShares: stack.readBigNumber(),
+            owner: stack.readAddress(),
+            paused: stack.readBoolean(),
+                strategyCount: stack.readNumber()
+            };
+        }
 
     static createFromConfig(config: VaultConfig, code: Cell, workchain = 0) {
         const data = vaultConfigToCell(config);

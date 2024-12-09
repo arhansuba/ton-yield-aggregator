@@ -1,0 +1,131 @@
+#pragma version >=0.4.0;
+
+#include "../interfaces/IStrategy.fc";
+#include "BaseStrategy.fc";
+
+;; Ston.fi specific constants
+const int OP_ADD_LIQUIDITY = 0x1c98f233;
+const int OP_REMOVE_LIQUIDITY = 0x2c98f234;
+const int OP_STAKE_LP = 0x3c98f235;
+const int OP_UNSTAKE_LP = 0x4c98f236;
+const int OP_CLAIM_REWARD = 0x5c98f237;
+const int STONFI_SLIPPAGE = 50; ;; 0.5%
+const int LOCK_PERIOD = 604800;  ;; 7 days in seconds
+
+;; Additional storage for Ston.fi farming
+global int staked_lp_tokens;
+global int farming_start_time;
+
+() load_data() impure inline {
+    ;; Load base strategy data
+    slice ds = get_data().begin_parse();
+    vault_address = ds~load_msg_addr();
+    total_assets = ds~load_coins();
+    total_earned = ds~load_coins();
+    performance_fee = ds~load_uint(16);
+    protocol_fee = ds~load_uint(16);
+    target_pool = ds~load_msg_addr();
+    
+    ;; Load Ston.fi specific data
+    if (ds.slice_refs_empty?() == 0) {
+        cell extra = ds~load_ref();
+        slice extra_ds = extra.begin_parse();
+        staked_lp_tokens = extra_ds~load_coins();
+        farming_start_time = extra_ds~load_uint(64);
+    }
+}
+
+() save_data() impure inline {
+    set_data(begin_cell()
+        .store_slice(vault_address)
+        .store_coins(total_assets)
+        .store_coins(total_earned)
+        .store_uint(performance_fee, 16)
+        .store_uint(protocol_fee, 16)
+        .store_slice(target_pool)
+        .store_ref(begin_cell()
+            .store_coins(staked_lp_tokens)
+            .store_uint(farming_start_time, 64)
+            .end_cell())
+        .end_cell());
+}
+
+() _invest_funds(int amount, slice pool_address) impure inline_ref {
+    ;; First add liquidity to get LP tokens
+    int min_lp = (amount * (10000 - STONFI_SLIPPAGE)) / 10000;
+    
+    cell add_liq_msg = begin_cell()
+        .store_uint(0x18, 6)
+        .store_slice(pool_address)
+        .store_coins(amount)
+        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_uint(OP_ADD_LIQUIDITY, 32)
+        .store_coins(min_lp)
+    .end_cell();
+    
+    send_raw_message(add_liq_msg, 1);
+    
+    ;; Then stake LP tokens in farming
+    if (min_lp > 0) {
+        cell stake_msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(pool_address)
+            .store_coins(min_lp)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_uint(OP_STAKE_LP, 32)
+            .store_uint(LOCK_PERIOD, 32)
+        .end_cell();
+        
+        send_raw_message(stake_msg, 1);
+        
+        staked_lp_tokens += min_lp;
+        farming_start_time = now();
+        save_data();
+    }
+}
+
+() _withdraw_funds(int amount, slice pool_address) impure inline_ref {
+    ;; First unstake from farming
+    if (staked_lp_tokens > 0) {
+        cell unstake_msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(pool_address)
+            .store_coins(amount)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_uint(OP_UNSTAKE_LP, 32)
+        .end_cell();
+        
+        send_raw_message(unstake_msg, 1);
+    }
+    
+    ;; Then remove liquidity
+    cell remove_liq_msg = begin_cell()
+        .store_uint(0x18, 6)
+        .store_slice(pool_address)
+        .store_coins(amount)
+        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_uint(OP_REMOVE_LIQUIDITY, 32)
+    .end_cell();
+    
+    send_raw_message(remove_liq_msg, 1);
+    
+    staked_lp_tokens -= amount;
+    save_data();
+}
+
+int _calculate_rewards() impure inline_ref {
+    if (staked_lp_tokens == 0 | now()) < farming_start_time + LOCK_PERIOD {
+        return 0;
+    }
+    
+    cell claim_msg = begin_cell()
+        .store_uint(0x18, 6)
+        .store_slice(target_pool)
+        .store_coins(100000000)
+        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_uint(OP_CLAIM_REWARD, 32)
+    .end_cell();
+    
+    send_raw_message(claim_msg, 64);
+    return accumulated_rewards;
+}

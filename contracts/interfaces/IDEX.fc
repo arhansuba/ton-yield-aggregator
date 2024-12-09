@@ -1,0 +1,23 @@
+#pragma version >=0.4.0;
+
+{- DEX Interface -}
+
+get pool_price(slice pool_address) method_id {
+    ;; Implementation required
+    return 0;
+}
+
+(int) swap(int amount, int min_return) method_id {
+    ;; Implementation required
+    return false;
+}
+
+(int) add_liquidity(int amount_a, int amount_b) method_id {
+    ;; Implementation required 
+    return 0;
+}
+
+((int, int)) remove_liquidity(int lp_amount) method_id {
+    ;; Implementation required
+    return (0, 0);
+}

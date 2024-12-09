@@ -1,0 +1,196 @@
+#pragma version >=0.4.0;
+
+#include "../interfaces/IVault.fc";
+
+;; Error codes
+const int ERROR_INVALID_AMOUNT = 100;
+const int ERROR_UNAUTHORIZED = 101;
+const int ERROR_INSUFFICIENT_BALANCE = 102;
+const int ERROR_PAUSED = 103;
+const int ERROR_MAX_STRATEGIES = 104;
+
+;; Operation codes
+const int OP_DEPOSIT = 0x1234;
+const int OP_WITHDRAW = 0x5678;
+const int OP_ADD_STRATEGY = 0x9abc;
+const int OP_REMOVE_STRATEGY = 0xdef0;
+const int OP_REBALANCE = 0x4321;
+
+;; Storage TL-B
+;; storage#_ total_assets:Coins
+;;           total_shares:Coins
+;;           strategies:(HashmapE 256 Strategy)
+;;           owner:MsgAddress
+;;           paused:Bool
+;;           = Storage;
+
+global int total_assets;
+global int total_shares;
+global cell strategies;
+global slice owner_address;
+global int paused;
+
+() load_data() impure inline {
+    slice ds = get_data().begin_parse();
+    total_assets = ds~load_coins();
+    total_shares = ds~load_coins();
+    strategies = ds~load_dict();
+    owner_address = ds~load_msg_addr();
+    paused = ds~load_uint(1);
+    ds.end_parse();
+}
+
+() save_data() impure inline {
+    set_data(begin_cell()
+        .store_coins(total_assets)
+        .store_coins(total_shares)
+        .store_dict(strategies)
+        .store_slice(owner_address)
+        .store_uint(paused, 1)
+        .end_cell());
+}
+
+() require_owner() impure inline {
+    throw_unless(ERROR_UNAUTHORIZED, equal_slices(sender_addr(), owner_address));
+}
+
+() require_not_paused() impure inline {
+    throw_if(ERROR_PAUSED, paused != 0);
+}
+
+int calculate_shares(int deposit_amount) inline {
+    if (total_assets == 0) { return deposit_amount; }
+    return muldiv(deposit_amount, total_shares, total_assets);
+}
+
+int calculate_tokens(int share_amount) inline {
+    return muldiv(share_amount, total_assets, total_shares);
+}
+
+() recv_internal(int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { return (); }
+    
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+    if (flags & 1) { return (); }
+    slice sender = cs~load_msg_addr();
+    
+    load_data();
+    
+    int op = in_msg_body~load_uint(32);
+    
+    ;; Deposit
+    if (op == OP_DEPOSIT) {
+        require_not_paused();
+        throw_unless(ERROR_INVALID_AMOUNT, msg_value >= 100000000); ;; 0.1 TON minimum
+        
+        int share_amount = calculate_shares(msg_value);
+        total_shares += share_amount;
+        total_assets += msg_value;
+        
+        ;; Forward deposit to best strategy
+        (slice strategy_addr, int success) = get_best_strategy();
+        if (success) {
+            cell msg = begin_cell()
+                .store_uint(0x18, 6)
+                .store_slice(strategy_addr)
+                .store_coins(msg_value)
+                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+                .store_uint(OP_DEPOSIT, 32)
+                .store_coins(msg_value)
+                .end_cell();
+            send_raw_message(msg, 1);
+        }
+        
+        save_data();
+        return ();
+    }
+    
+    ;; Withdraw
+    if (op == OP_WITHDRAW) {
+        require_not_paused();
+        int share_amount = in_msg_body~load_coins();
+        throw_unless(ERROR_INVALID_AMOUNT, share_amount > 0);
+        throw_unless(ERROR_INSUFFICIENT_BALANCE, share_amount <= total_shares);
+        
+        int withdraw_amount = calculate_tokens(share_amount);
+        total_shares -= share_amount;
+        total_assets -= withdraw_amount;
+        
+        ;; Request withdrawal from strategies
+        cell msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(sender)
+            .store_coins(withdraw_amount)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .end_cell();
+        send_raw_message(msg, 1);
+        
+        save_data();
+        return ();
+    }
+    
+    ;; Admin operations
+    require_owner();
+    
+    ;; Add strategy
+    if (op == OP_ADD_STRATEGY) {
+        slice strategy_addr = in_msg_body~load_msg_addr();
+        int strategy_count = get_strategy_count();
+        throw_if(ERROR_MAX_STRATEGIES, strategy_count >= 10);
+        
+        cell strategy_data = begin_cell()
+            .store_slice(strategy_addr)
+            .store_coins(0) ;; allocated amount
+            .store_uint(0, 16) ;; performance
+            .end_cell();
+        
+        strategies~udict_set(256, strategy_count + 1, strategy_data);
+        save_data();
+        return ();
+    }
+    
+    ;; Remove strategy
+    if (op == OP_REMOVE_STRATEGY) {
+        int strategy_id = in_msg_body~load_uint(256);
+        (slice strategy_data, int success) = strategies.udict_get?(256, strategy_id);
+        throw_unless(ERROR_INVALID_AMOUNT, success);
+        
+        slice strategy_addr = strategy_data~load_msg_addr();
+        int allocated = strategy_data~load_coins();
+        
+        if (allocated > 0) {
+            ;; Request withdrawal from strategy
+            cell msg = begin_cell()
+                .store_uint(0x18, 6)
+                .store_slice(strategy_addr)
+                .store_coins(0)
+                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+                .store_uint(OP_WITHDRAW, 32)
+                .store_coins(allocated)
+                .end_cell();
+            send_raw_message(msg, 1);
+        }
+        
+        strategies~udict_delete?(256, strategy_id);
+        save_data();
+        return ();
+    }
+    
+    throw(0xffff);
+}
+
+;; Get methods
+
+(int, int, cell) get_vault_data() method_id {
+    load_data();
+    return (total_assets, total_shares, strategies);
+}
+
+int get_strategy_count() method_id {
+    load_data();
+    int count = 0;
+    (_, int key, int success) = strategies.udict_get_max?(256);
+    if (success) { count = key; }
+    return count;
+}

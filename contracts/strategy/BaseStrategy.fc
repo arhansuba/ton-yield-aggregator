@@ -1,0 +1,118 @@
+#pragma version >=0.4.0;
+
+#include "../interfaces/IStrategy.fc";
+
+const int ERROR_CALLER_NOT_VAULT = 100;
+const int ERROR_INVALID_AMOUNT = 101;
+const int ERROR_INSUFFICIENT_FUNDS = 102;
+
+;; Storage TL-B
+;; storage#_ vault:MsgAddress
+;;           total_assets:Coins
+;;           total_earned:Coins
+;;           performance_fee:uint16
+;;           protocol_fee:uint16
+;;           target_pool:MsgAddress 
+;;           = Storage;
+
+global slice vault_address;
+global int total_assets;
+global int total_earned;
+global int performance_fee;
+global int protocol_fee;
+global slice target_pool;
+
+() load_data() impure inline {
+    slice ds = get_data().begin_parse();
+    vault_address = ds~load_msg_addr();
+    total_assets = ds~load_coins();
+    total_earned = ds~load_coins();
+    performance_fee = ds~load_uint(16);
+    protocol_fee = ds~load_uint(16);
+    target_pool = ds~load_msg_addr();
+    ds.end_parse();
+}
+
+() save_data() impure inline {
+    set_data(begin_cell()
+        .store_slice(vault_address)
+        .store_coins(total_assets)
+        .store_coins(total_earned)
+        .store_uint(performance_fee, 16)
+        .store_uint(protocol_fee, 16)
+        .store_slice(target_pool)
+        .end_cell());
+}
+
+;; Abstract functions to be implemented by specific strategies
+() _invest_funds(int amount, slice pool_address) impure inline_ref;
+() _withdraw_funds(int amount, slice pool_address) impure inline_ref;
+int _calculate_rewards() impure inline_ref;
+
+() recv_internal(int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) {
+        return ();
+    }
+
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+    if (flags & 1) {
+        return ();
+    }
+    slice sender = cs~load_msg_addr();
+    load_data();
+
+    ;; Only vault can call strategy functions
+    throw_unless(ERROR_CALLER_NOT_VAULT, equal_slices(sender, vault_address));
+
+    int op = in_msg_body~load_uint(32);
+
+    if (op == 1) { ;; Invest
+        int amount = in_msg_body~load_coins();
+        throw_unless(ERROR_INVALID_AMOUNT, amount > 0);
+        _invest_funds(amount, target_pool);
+        total_assets += amount;
+        save_data();
+        return ();
+    }
+
+    if (op == 2) { ;; Withdraw
+        int amount = in_msg_body~load_coins();
+        throw_unless(ERROR_INVALID_AMOUNT, amount > 0);
+        throw_unless(ERROR_INSUFFICIENT_FUNDS, amount <= total_assets);
+        _withdraw_funds(amount, target_pool);
+        total_assets -= amount;
+        save_data();
+        return ();
+    }
+
+    if (op == 3) { ;; Claim yield
+        int rewards = _calculate_rewards();
+        if (rewards > 0) {
+            int protocol_amount = (rewards * protocol_fee) / 10000;
+            int performance_amount = (rewards * performance_fee) / 10000;
+            int vault_amount = rewards - protocol_amount - performance_amount;
+
+            ;; Send rewards to vault
+            cell msg = begin_cell()
+                .store_uint(0x18, 6)
+                .store_slice(vault_address)
+                .store_coins(vault_amount)
+                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+                .end_cell();
+            send_raw_message(msg, 1);
+
+            total_earned += rewards;
+            save_data();
+        }
+        return ();
+    }
+
+    throw(0xffff);
+}
+
+;; Get methods
+(int, int) get_strategy_info() method_id {
+    load_data();
+    return (total_assets, total_earned);
+}

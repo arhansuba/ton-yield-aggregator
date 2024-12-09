@@ -1,0 +1,40 @@
+#pragma version >=0.4.0;
+
+{- Vault Interface -}
+
+(int) deposit(int amount) method_id {
+    ;; Implementation required
+    return 0;
+}
+
+(int) withdraw(int shares) method_id {
+    ;; Implementation required 
+    return 0;
+}
+
+() add_strategy(slice strategy_address) method_id {
+    ;; Implementation required
+}
+
+() remove_strategy(slice strategy_address) method_id {
+    ;; Implementation required
+}
+
+() set_fee(int new_fee) method_id {
+    ;; Implementation required
+}
+
+(int) get_total_assets() method_id {
+    ;; Implementation required
+    return 0;
+}
+
+(int) get_total_shares() method_id {
+    ;; Implementation required
+    return 0;
+}
+
+(int) get_user_shares(slice user_address) method_id {
+    ;; Implementation required
+    return 0;
+}

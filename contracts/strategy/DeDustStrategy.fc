@@ -1,0 +1,68 @@
+#pragma version >=0.4.0;
+
+#include "../interfaces/IStrategy.fc";
+#include "BaseStrategy.fc";
+
+;; DeDust-specific constants
+const int OP_PROVIDE_LIQUIDITY = 0x7362d09c;
+const int OP_REMOVE_LIQUIDITY = 0x595f07bc;
+const int OP_CLAIM_REWARDS = 0x1f037ecb;
+const int DEDUST_FEE_DENOMINATOR = 10000;
+const int SLIPPAGE_TOLERANCE = 50; ;; 0.5%
+
+;; Implementation of abstract functions from BaseStrategy
+() _invest_funds(int amount, slice pool_address) impure inline_ref {
+    ;; Calculate minimum LP tokens (with slippage protection)
+    int min_lp = (amount * (DEDUST_FEE_DENOMINATOR - SLIPPAGE_TOLERANCE)) / DEDUST_FEE_DENOMINATOR;
+    
+    ;; Create message to add liquidity
+    cell msg = begin_cell()
+        .store_uint(0x18, 6)           ;; bounce
+        .store_slice(pool_address)
+        .store_coins(amount)           ;; sending full amount
+        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_uint(OP_PROVIDE_LIQUIDITY, 32)
+        .store_coins(min_lp)           ;; minimum LP tokens to receive
+        .store_uint(0, 1)             ;; no custom payload
+    .end_cell();
+    
+    send_raw_message(msg, 1);  ;; mode 1: pay fee separately
+}
+
+() _withdraw_funds(int amount, slice pool_address) impure inline_ref {
+    int min_return = (amount * (DEDUST_FEE_DENOMINATOR - SLIPPAGE_TOLERANCE)) / DEDUST_FEE_DENOMINATOR;
+    
+    cell msg = begin_cell()
+        .store_uint(0x18, 6)
+        .store_slice(pool_address)
+        .store_coins(amount)
+        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_uint(OP_REMOVE_LIQUIDITY, 32)
+        .store_coins(min_return)
+        .store_uint(0, 1)
+    .end_cell();
+    
+    send_raw_message(msg, 1);
+}
+
+int _calculate_rewards() impure inline_ref {
+    ;; Query accumulated rewards from DeDust pool
+    cell msg = begin_cell()
+        .store_uint(0x18, 6)
+        .store_slice(target_pool)
+        .store_coins(100000000)  ;; 0.1 TON for gas
+        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_uint(OP_CLAIM_REWARDS, 32)
+    .end_cell();
+    
+    send_raw_message(msg, 64);  ;; mode 64 to handle response
+    return accumulated_rewards;  ;; Will be set by response handler
+}
+
+;; DeDust-specific message handlers
+() handle_pool_response(int op, slice msg) impure {
+    if (op == OP_CLAIM_REWARDS) {
+        accumulated_rewards = msg~load_coins();
+        save_data();
+    }
+}
