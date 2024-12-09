@@ -1,4 +1,4 @@
-import { Blueprint } from '@ton-community/blueprint';
+import { Blueprint } from "@ton/blueprint";
 
 export const blueprint: Blueprint = {
   contracts: {
